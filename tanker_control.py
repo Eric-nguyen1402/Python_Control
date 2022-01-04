@@ -14,36 +14,31 @@ from math import floor
 from ctypes import *
 
 time.sleep(5) 
-
 class tanker:
-
     def __init__(self, hosts, users, passwds, databases, chanels, bustypes):
         '''Initialize database and setting id , data frame canbus need to send on raspberry '''
         # khai báo database phpmyadmin
         self.connection = pymysql.connect(
                 host=hosts, user=users, passwd=passwds, database=databases)
         self.cursor = self.connection.cursor()
-
         self.error = 0
         self.counter = 0
         self.temp_b = 1
         self.temp_c = 0
-        
         # Initialize protocol canbus 
         self.bus = can.interface.Bus(channel = chanels, bustype = bustypes)
         # List ID canbus
         self.id_canbus = [101, 201, 211 ,221, 301, 601, 611, 621]
         # Initialize messages that sends to canbus to control motor
         self.data = [(0, 0, 0, 0, 0, 0,  0, 0),  # Stop
-                    (1, 1, 0, 0, 0, 0, 0, 0),  # forward straight
-                    (1, 2, 0, 0, 0, 0, 0, 0),  # forward right
-                    (1, 3, 0, 0, 0, 0, 0, 0),  # forward left
-                    (2, 1, 0, 0, 0, 0, 0, 0),  # reverse straight
-                    (2, 2, 0, 0, 0, 0, 0, 0),  # reverse right
-                    (2, 3, 0, 0, 0, 0, 0, 0),  # reverse left
-                    (3, 1, 0, 0, 0, 0, 0, 0),  # circle CW
-                    (4, 1, 0, 0, 0, 0, 0, 0)]  # circle CCW 
-
+        (1, 1, 0, 0, 0, 0, 0, 0),  # forward straight
+        (1, 2, 0, 0, 0, 0, 0, 0),  # forward right
+        (1, 3, 0, 0, 0, 0, 0, 0),  # forward left
+        (2, 1, 0, 0, 0, 0, 0, 0),  # reverse straight
+        (2, 2, 0, 0, 0, 0, 0, 0),  # reverse right
+        (2, 3, 0, 0, 0, 0, 0, 0),  # reverse left
+        (3, 1, 0, 0, 0, 0, 0, 0),  # circle CW
+        (4, 1, 0, 0, 0, 0, 0, 0)]  # circle CCW 
         self.data_forward = [(1, 1, 1, 0, 0, 0, 0, 0),  
                             (1, 1, 2, 0, 0, 0, 0, 0),  
                             (1, 1, 3, 0, 0, 0, 0, 0),  
@@ -54,7 +49,6 @@ class tanker:
                             (1, 1, 8, 0, 0, 0, 0, 0),  
                             (1, 1, 9, 0, 0, 0, 0, 0),
                             (1, 1, 10, 0, 0, 0, 0, 0),]  
-
         self.data_reverse = [(2, 1, 1, 0, 0, 0, 0, 0),  
                             (2, 1, 2, 0, 0, 0, 0, 0),  
                             (2, 1, 3, 0, 0, 0, 0, 0),  
@@ -67,29 +61,24 @@ class tanker:
                             (2, 1, 10, 0, 0, 0, 0, 0)]
     def dextohex(self,decimal):
         return hex(decimal)[2:]
-
     def convert_current(self,hexnumber):
         x = int(hexnumber, 16)
         y = int('0xffff',16)
         values = int(hex(y - x + 1),16)
         return values
-
     def take_angle(self):
         '''Take the angle from database'''
-
         retrive_1 = "Select * from GY25;"
         # executing the quires
         self.cursor.execute(retrive_1)
         rows_1 = self.cursor.fetchall()
         return rows_1[0][3]
-
     def canbus(self,data_msg):
         '''Function send canbus with data messages'''
         msg = can.Message(arbitration_id=301,
                         data=data_msg,
                         is_extended_id=False)  # initialize ID 
         self.bus.send(msg)  # send messages with initial ID
-
     def action(self):  
         '''Main function do some task like : 
         -> Read data from database 
@@ -104,7 +93,6 @@ class tanker:
         self.connection.commit()
         self.cursor.execute(update_retrives)
         self.connection.commit()
-
         while True:
         # -----------------------------------------------read data from database--------------------------------------------------------
             # queries for retrievint all rows
@@ -112,13 +100,11 @@ class tanker:
             # executing the quires
             self.cursor.execute(retrive)
             rows = self.cursor.fetchall()
-            
             check_connection = rows[0][1] - rows[0][0]
             print("level=",rows[0][1])
             if rows[0][1] == 0:
                 self.counter = 0
                 self.temp_b = 1
-
         # ---------------------------------------------assign value from database then send to canbus-------------------------------
             if check_connection >= 0:
                 # forward straight
@@ -168,7 +154,6 @@ class tanker:
                 self.cursor.execute(update_retrive)
                 self.connection.commit()
         # ------------------------------------ send canbus everytime ----------------------------------
-        
             for i in range(len(self.id_canbus)):  # send data value to fixed ID address
                     if self.id_canbus[i] == 101 or self.id_canbus[i] == 201:
                         msg = can.Message(arbitration_id=self.id_canbus[i],
@@ -186,25 +171,34 @@ class tanker:
                         # Update response from canbus
                         if dataCanbus is None:
                             print("Don't Have Any Response From CANBUS")
-
                             # queries for retrievint all rows
                             update_retrive = "UPDATE `move_control` SET `error_can` = 'OK' WHERE `move_control`.`id` = 1;"
-
                             # executing the quires
                             self.cursor.execute(update_retrive)
                             self.connection.commit()
-
                         else:
                             if dataCanbus.arbitration_id == 102:
-                                voltage = "0x" + \
+                                remain_voltage = "0x" + \
                                      self.dextohex(dataCanbus.data[5]) + \
                                      self.dextohex(dataCanbus.data[4])
-                                voltage2 = int(voltage, 16)
+                                voltage2 = int(remain_voltage, 16)
                                 # queries for retrievint all rows
                                 update_retrive = "UPDATE `move_control` SET `battery` = " + \
                                     str(voltage2) + \
                                     ",  `error_can` = 'OK' WHERE `move_control`.`id` = 1;"
                                 self.cursor.execute(update_retrive)
+                                self.connection.commit()                    
+                                voltage = "0x" + \
+                                     self.dextohex(dataCanbus.data[1]) + \
+                                     self.dextohex(dataCanbus.data[0])
+                                # print("volatge ",voltage)
+                                voltage3 = int(voltage, 16)
+                                # print(voltage3/1000)
+                                # queries for retrievint all rows
+                                update_retrive_voltage = "UPDATE `move_control` SET `voltage` = " + \
+                                    str(voltage3/1000) + \
+                                    ",  `error_can` = 'OK' WHERE `move_control`.`id` = 1;"
+                                self.cursor.execute(update_retrive_voltage)
                                 self.connection.commit()
                             if dataCanbus.arbitration_id == 202:
                                 current = "0x" + \
@@ -229,21 +223,17 @@ class tanker:
                                         self.cursor.execute(update_retrive)
                                         self.connection.commit()
                         self.error = 0
-
                     except can.CanError:
                         print(can.CanError)
-
                         # queries for retrievint all rows
                         update_retrive = "UPDATE `move_control` SET `error_can` = 'OK' WHERE `move_control`.`id` = 1;"
                         # executing the quires
                         self.cursor.execute(update_retrive)
                         self.connection.commit()
                         self.error = 1 
-                    
 def main():
     control = tanker("localhost","root","raspberry","tanker",'can0','socketcan_native')
     while True:
         control.action()    
-        
 if __name__ == '__main__':
     main()
